@@ -1,0 +1,26 @@
+{
+  "name": "smart-expiry-guide",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart Expiry and Local Disposal Guide - auth, admin backend and mobile client for Sibu",
+  "workspaces": [
+    "server",
+    "admin"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c green,cyan \"npm:dev -w server\" \"npm:dev -w admin\"",
+    "dev:server": "npm run dev -w server",
+    "dev:admin": "npm run dev -w admin",
+    "build": "npm run build -w server && npm run build -w admin",
+    "start": "npm run start -w server",
+    "seed": "npm run seed -w server",
+    "test": "npm test -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w admin"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-wal
+*.db-shm
+server/data/
+admin/dist/
+
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/pubspec.lock
+mobile/android/
+mobile/ios/
+mobile/web/
+mobile/.idea/
+
+.DS_Store
+Thumbs.db
+*.log
