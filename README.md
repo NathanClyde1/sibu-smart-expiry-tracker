@@ -87,6 +87,76 @@ one place two branches will conflict.
 6. **Squash-merge into `main`.** One feature, one commit on `main`. Never force-push `main`.
 7. **Delete the branch after merge.** `git switch main && git pull && git branch -d <branch>`.
 
+### Step by step: pushing your work (feature developers)
+
+Do this once, the first time you work on the project.
+
+```bash
+git clone https://github.com/NathanClyde1/sibu-smart-expiry-tracker.git
+cd sibu-smart-expiry-tracker
+npm install
+npm run setup:features
+```
+
+Then every time you start a task:
+
+```bash
+# 1. get the latest main
+git switch main
+git pull
+
+# 2. make your own branch - <task> is a few words, hyphens not spaces
+git switch -c feature/map-disposal-google-maps
+```
+
+Build your feature. Then save it:
+
+```bash
+# 3. see what you changed
+git status
+
+# 4. stage and commit
+git add -A
+git commit -m "feat(map-disposal): plot verified Sibu drop-off points"
+
+# 5. push. The first push needs -u so git remembers the remote branch.
+git push -u origin feature/map-disposal-google-maps
+```
+
+`git push` uploads your branch. It does **not** put your code into `main` — that is deliberate. Now:
+
+1. Open the repo on GitHub. A yellow bar offers **Compare & pull request**.
+2. Base = `main`, compare = your branch. Fill in what you changed and what you tested.
+3. Request a review from the tech lead (or a teammate if you only touched your own folder).
+4. Wait for the review. Push more commits to the same branch to address comments — the PR updates
+   automatically.
+5. The lead **squash-merges** it. Do not merge your own PR.
+
+After it is merged:
+
+```bash
+git switch main
+git pull
+git branch -d feature/map-disposal-google-maps
+```
+
+### When things go wrong
+
+| Message / situation | Fix |
+| --- | --- |
+| `Updates were rejected because the remote contains work…` | `main` moved. Run `git pull --rebase origin main`, fix any conflicts, then `git push` again. |
+| `fatal: The current branch main has no upstream branch` | You are on `main`. `git switch -c feature/<feature>-<task>` first, then push. |
+| You committed to `main` by mistake (not pushed yet) | `git switch -c feature/<feature>-<task>` — the commit moves to the new branch, `main` is clean. |
+| You committed to `main` **and** pushed | Tell the lead before doing anything else. Do not force-push. |
+| `error: Your local changes would be overwritten` | `git stash`, do the pull/rebase, then `git stash pop`. |
+| Merge conflict | Open the file, keep both sides where it makes sense, delete the `<<<<<<<` markers, then `git add <file>` and `git rebase --continue`. |
+| `flutter: command not found` | Install Flutter and add it to PATH; you cannot run the app without it. |
+| Push asks for a password | GitHub no longer accepts passwords. Use a personal access token as the password, or install the GitHub CLI (`gh auth login`). |
+
+**Never run** `git push --force`, `git push origin main`, or `git reset --hard` on a branch with work
+you have not pushed. Everything else is recoverable; those three can lose your work or someone
+else's.
+
 ### Scaffolding
 
 `npm run setup:features` creates any missing feature folders and lists the ownership table. It
