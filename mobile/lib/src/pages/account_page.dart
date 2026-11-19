@@ -1,30 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../api_client.dart';
-import '../auth_controller.dart';
+import '../../services/auth_service.dart';
 
 class AccountPage extends StatefulWidget {
-  const AccountPage({super.key, required this.auth});
+  const AccountPage({super.key, required this.auth, required this.user});
 
-  final AuthController auth;
+  final AuthService auth;
+  final User user;
 
   @override
   State<AccountPage> createState() => _AccountPageState();
 }
 
 class _AccountPageState extends State<AccountPage> {
+  late final Future<bool> _adminCheck;
   bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _adminCheck = widget.auth.isAdmin();
+  }
 
   Future<void> _signOut() async {
-    setState(() => _busy = true);
-    await widget.auth.logout();
-    if (mounted) setState(() => _busy = false);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      await widget.auth.signOut();
+      // The root widget returns to the login screen on the auth event.
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not sign out. Try again.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.auth.user;
-    if (user == null) return const Scaffold(body: SizedBox.shrink());
+    final user = widget.user;
 
     return Scaffold(
       appBar: AppBar(
@@ -36,9 +54,20 @@ class _AccountPageState extends State<AccountPage> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _ProfileCard(user: user),
+          _ProfileCard(
+            name: displayNameOf(user),
+            email: user.email ?? 'No email on file',
+            adminCheck: _adminCheck,
+          ),
           const SizedBox(height: 16),
-          _SoonCard(),
+          const _SoonCard(),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF8F2A25)),
+            ),
+          ],
           const SizedBox(height: 24),
           OutlinedButton.icon(
             onPressed: _busy ? null : _signOut,
@@ -56,9 +85,15 @@ class _AccountPageState extends State<AccountPage> {
 }
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.user});
+  const _ProfileCard({
+    required this.name,
+    required this.email,
+    required this.adminCheck,
+  });
 
-  final AuthUser user;
+  final String name;
+  final String email;
+  final Future<bool> adminCheck;
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +113,7 @@ class _ProfileCard extends StatelessWidget {
                 radius: 26,
                 backgroundColor: const Color(0xFFE6F2EB),
                 child: Text(
-                  user.displayName.isEmpty ? '?' : user.displayName[0].toUpperCase(),
+                  name.isEmpty ? '?' : name[0].toUpperCase(),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -92,12 +127,12 @@ class _ProfileCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user.displayName,
+                      name,
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      user.email,
+                      email,
                       style: const TextStyle(fontSize: 13, color: Color(0xFF5D6F66)),
                     ),
                   ],
@@ -108,13 +143,15 @@ class _ProfileCard extends StatelessWidget {
           const SizedBox(height: 18),
           const Divider(height: 1, color: Color(0xFFDFE7E2)),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              _Chip(
-                label: user.isAdmin ? 'Administrator' : 'Household account',
-                icon: user.isAdmin ? Icons.shield_outlined : Icons.home_outlined,
-              ),
-            ],
+          FutureBuilder<bool>(
+            future: adminCheck,
+            builder: (context, snapshot) {
+              final admin = snapshot.data ?? false;
+              return _Chip(
+                label: admin ? 'Administrator' : 'Household account',
+                icon: admin ? Icons.shield_outlined : Icons.home_outlined,
+              );
+            },
           ),
         ],
       ),
@@ -156,6 +193,8 @@ class _Chip extends StatelessWidget {
 }
 
 class _SoonCard extends StatelessWidget {
+  const _SoonCard();
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -165,15 +204,15 @@ class _SoonCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFDFE7E2)),
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Coming with your pantry',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Expiry tracking, offline inventory and the Sibu recycling map will appear here once '
             'those modules ship. Your account already syncs with the council directory.',
             style: TextStyle(fontSize: 13, height: 1.5, color: Color(0xFF5D6F66)),

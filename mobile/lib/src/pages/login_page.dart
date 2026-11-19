@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../auth_controller.dart';
+import '../../services/auth_service.dart';
 import '../widgets/auth_scaffold.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.auth});
 
-  final AuthController auth;
+  final AuthService auth;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -19,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _busy = false;
   bool _obscure = true;
+  String? _error;
 
   @override
   void dispose() {
@@ -30,15 +32,25 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _busy = true);
-    await widget.auth.login(email: _email.text, password: _password.text);
-    if (mounted) setState(() => _busy = false);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      await widget.auth.signIn(email: _email.text, password: _password.text);
+      // The root widget swaps to the account screen when the session arrives.
+    } on AuthException catch (failure) {
+      _error = failure.message;
+    } catch (_) {
+      _error = 'Cannot reach Supabase. Check your connection and try again.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final error = widget.auth.error;
-
     return AuthScaffold(
       title: 'Welcome back',
       subtitle: 'Sign in to manage your household pantry.',
@@ -47,8 +59,8 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (error != null) ...[
-              AuthErrorBanner(message: error),
+            if (_error != null) ...[
+              AuthErrorBanner(message: _error!),
               const SizedBox(height: 16),
             ],
             TextFormField(

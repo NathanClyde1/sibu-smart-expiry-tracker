@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../auth_controller.dart';
+import '../../services/auth_service.dart';
 import '../widgets/auth_scaffold.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key, required this.auth});
 
-  final AuthController auth;
+  final AuthService auth;
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -19,6 +20,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   bool _busy = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -32,21 +34,51 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _busy = true);
-    final ok = await widget.auth.register(
-      displayName: _name.text,
-      email: _email.text,
-      password: _password.text,
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (ok) Navigator.of(context).pop();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      final response = await widget.auth.signUp(
+        email: _email.text,
+        password: _password.text,
+        fullName: _name.text,
+      );
+      if (!mounted) return;
+
+      if (response.session == null) {
+        // Email confirmation is switched on: no session until the link is clicked.
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirm your email'),
+            content: Text(
+              'We sent a confirmation link to ${_email.text.trim()}. '
+              'Open it, then sign in.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Got it'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (mounted) Navigator.of(context).pop();
+    } on AuthException catch (failure) {
+      _error = failure.message;
+    } catch (_) {
+      _error = 'Cannot reach Supabase. Check your connection and try again.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final error = widget.auth.error;
-
     return AuthScaffold(
       showBack: true,
       title: 'Create your household',
@@ -56,8 +88,8 @@ class _RegisterPageState extends State<RegisterPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (error != null) ...[
-              AuthErrorBanner(message: error),
+            if (_error != null) ...[
+              AuthErrorBanner(message: _error!),
               const SizedBox(height: 16),
             ],
             TextFormField(

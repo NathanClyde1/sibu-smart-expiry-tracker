@@ -1,11 +1,23 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
-import 'src/api_client.dart';
-import 'src/auth_controller.dart';
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'services/auth_service.dart';
+import 'src/config.dart';
 import 'src/pages/account_page.dart';
 import 'src/pages/login_page.dart';
 
-void main() => runApp(const SmartExpiryApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
+
+  runApp(const SmartExpiryApp());
+}
 
 class SmartExpiryApp extends StatefulWidget {
   const SmartExpiryApp({super.key});
@@ -15,36 +27,40 @@ class SmartExpiryApp extends StatefulWidget {
 }
 
 class _SmartExpiryAppState extends State<SmartExpiryApp> {
-  late final AuthController _auth;
+  final AuthService _auth = AuthService();
+
+  Session? _session;
+  late final StreamSubscription<AuthState> _subscription;
 
   @override
   void initState() {
     super.initState();
-    _auth = AuthController(ApiClient());
-    _auth.addListener(_onAuthChanged);
-    _auth.bootstrap();
-  }
 
-  void _onAuthChanged() => setState(() {});
+    // Restores an existing session across app restarts, then tracks changes.
+    _session = _auth.currentSession;
+    _subscription = _auth.authStateChanges.listen((state) {
+      if (!mounted) return;
+      setState(() => _session = state.session);
+    });
+  }
 
   @override
   void dispose() {
-    _auth.removeListener(_onAuthChanged);
-    _auth.dispose();
+    _subscription.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = _session;
+
     return MaterialApp(
       title: 'Sibu Disposal Guide',
       debugShowCheckedModeBanner: false,
       theme: _theme(),
-      home: switch (_auth.status) {
-        AuthStatus.loading => const _Splash(),
-        AuthStatus.signedOut => LoginPage(auth: _auth),
-        AuthStatus.signedIn => AccountPage(auth: _auth),
-      },
+      home: session == null
+          ? LoginPage(auth: _auth)
+          : AccountPage(auth: _auth, user: session.user),
     );
   }
 }
@@ -77,24 +93,4 @@ ThemeData _theme() {
       ),
     ),
   );
-}
-
-class _Splash extends StatelessWidget {
-  const _Splash();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.recycling, size: 48, color: Color(0xFF1F7A52)),
-            SizedBox(height: 16),
-            CircularProgressIndicator(),
-          ],
-        ),
-      ),
-    );
-  }
 }

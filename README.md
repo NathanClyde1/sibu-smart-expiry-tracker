@@ -1,11 +1,12 @@
 # Smart Expiry and Local Disposal Guide
 
-Auth + admin backend for a Sibu food-waste app. The mobile client logs households in; the web
-console lets council administrators maintain the recycling centres and item categories the app
-shows.
+Auth + admin backend for a Sibu food-waste app. Households sign in through Supabase Auth in the
+Flutter client; the web console lets council administrators maintain the recycling centres and
+item categories the app shows.
 
-**Built so far:** secure authentication (household and admin) and the web admin dashboard.
-The pantry, offline cache, notifications and map are not implemented — see `AGENTS.md`.
+**Built so far:** secure authentication (household via Supabase, admin via the local API) and the
+web admin dashboard. The pantry, offline cache, notifications and map are not implemented — see
+`AGENTS.md` for the open backend decision.
 
 ## Quick start
 
@@ -48,23 +49,33 @@ The database is created and seeded on first start at `server/data/app.db`.
 
 ## Mobile client
 
-`mobile/` is a Flutter app: sign in, create a household, view the account, sign out. It stores the
-refresh token in the platform keychain and refreshes access tokens automatically.
+`mobile/` is a Flutter app: sign in, create a household, view the account, sign out. Authentication
+runs on **Supabase Auth**; the session is persisted by `supabase_flutter` in platform secure
+storage.
 
 ```bash
 cd mobile
 flutter create --platforms=android,ios .   # generates android/ and ios/ (not committed)
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000
+flutter run
 ```
 
-`10.0.2.2` is the Android emulator's route to the host. On a physical device use your machine's LAN
-IP and enable cleartext HTTP for debug builds.
+**One-time setup:** run `supabase/schema.sql` in the Supabase SQL editor. It creates `profiles`,
+the trigger that fills it on signup, and the row-level security that keeps `is_admin` out of reach
+of the client.
+
+Point at a different project with
+`--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`.
+
 
 ## Security notes
 
-- Access tokens last 15 minutes and live in memory in the browser, never in storage.
-- Refresh tokens are rotated on every use and stored hashed; replay revokes the family.
-- Passwords are scrypt-hashed. Registration cannot create an admin.
-- Login is rate limited per IP and email.
+- Household accounts are Supabase identities; admins are local API accounts. They are separate
+  stores today — see `AGENTS.md` for the open decision.
+- Admin access tokens last 15 minutes and live in memory in the browser, never in storage.
+- Admin refresh tokens are rotated on every use and stored hashed; replay revokes the family.
+- Passwords are scrypt-hashed on the API; Supabase hashes its own.
+- Registration cannot create an admin on either side.
+- `profiles.is_admin` is not client-writable — RLS plus column grants.
+- Login is rate limited per IP and email on the API.
 - Seeded coordinates are approximate and must be verified before the app routes anyone with them.

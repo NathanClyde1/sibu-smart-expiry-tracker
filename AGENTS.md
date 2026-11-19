@@ -7,28 +7,40 @@ Context for anyone (human or AI) picking this repo up.
 **Smart Expiry and Local Disposal Guide** — an app for households in Sibu, Sarawak, to waste less
 food and dispose of what is left correctly.
 
-The full concept has six parts. **Only two are built so far:**
+The full concept has six parts. **Only the first two are built:**
 
 | Part | Status |
 | --- | --- |
-| Secure authentication (household + admin) | built |
+| Secure authentication | built — mobile uses **Supabase Auth**, admin console uses the local API |
 | Web admin backend (Sibu recycling centres, item categories) | built |
-| Flutter mobile client (auth screens only) | written, **not compiled** — no Flutter SDK on the build machine |
+| Flutter mobile client (login, register, account) | written, **not compiled** — no Flutter SDK on the build machine |
 | Pantry / expiry tracker | not started |
 | SQLite offline cache + notifications | not started |
 | GPS map of recycling centres | not started |
 
-Do not assume the remaining modules exist. When adding them, follow the patterns below.
+## ⚠️ Two backends, on purpose, for now
+
+```
+Flutter app  ──> Supabase (Auth + Postgres)          <- households
+React admin  ──> Express API ──> SQLite (server/data) <- council staff
+```
+
+The mobile app is being built against Supabase because the team standardised on it. The admin
+console still runs on the Express API that was written first. **These are two separate user stores
+and two separate databases.** That is the one open architectural decision in this repo: either
+move the centres/categories into Supabase and retire the Express API, or keep the split and accept
+that administrators cannot sign into the mobile app. Do not add a third path.
 
 ## Layout
 
 ```
 server/   Express + TypeScript API, SQLite via better-sqlite3, node:test suite
 admin/    React 18 + Vite admin console (SPA, talks to /api through the Vite proxy)
-mobile/   Flutter 3 client: login, register, account
+mobile/   Flutter 3 client: Supabase Auth screens
+supabase/ SQL to run once in the Supabase project
 ```
 
-npm workspaces. One `npm install` at the root covers `server` and `admin`.
+npm workspaces cover `server` and `admin`. `mobile/` is a separate Flutter project.
 
 ## Run it
 
@@ -43,40 +55,68 @@ npm run build             # tsc + vite build
 First boot seeds an admin account from `SEED_ADMIN_*`, 4 Sibu recycling centres and 13 item
 categories. Seeding is idempotent: it only fills empty tables and never resets a password.
 
-## Authentication model
+Mobile:
 
-- **Access token**: HS256 JWT, 15 min, sent as `Authorization: Bearer`. Stateless.
-- **Refresh token**: 32 random bytes, 30 days, stored **hashed** (SHA-256) in `refresh_tokens`.
-  Rotated on every use. Replaying a used token revokes every session for that user — that is
-  deliberate, do not "fix" it.
-- **Browser** clients receive the refresh token only as an `httpOnly`, `SameSite=Strict` cookie
-  scoped to `/api/auth`. The admin SPA keeps the access token in a module variable (memory), so no
-  token ever touches `localStorage`.
-- **Mobile** clients send `X-Client: mobile` on login/refresh and receive the refresh token in the
-  JSON body, which they store in `flutter_secure_storage`.
-- Passwords: `scrypt` with a per-user salt, `scrypt$<salt>$<hash>` in one column. Never add bcrypt
-  or another hashing dependency.
+```bash
+cd mobile
+flutter create --platforms=android,ios .   # generates android/ and ios/ (not committed)
+flutter pub get
+flutter run
+```
+
+`mobile/lib/src/config.dart` holds the Supabase URL and publishable key, overridable with
+`--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`.
+
+**Before the mobile app works, run `supabase/schema.sql` in the Supabase SQL editor.** Without it
+there is no `profiles` table, so signup leaves no profile and `isAdmin()` always returns false.
+
+## Authentication — mobile (Supabase)
+
+`mobile/lib/services/auth_service.dart` is the only auth entry point. It wraps
+`supabase_flutter`, which also persists the session in platform secure storage — there is no token
+code in this repo.
+
+- `signUp` sends `data: {full_name}`; the `handle_new_user` trigger copies it into `public.profiles`.
+- `isAdmin()` reads `profiles.is_admin`, returning `false` instead of throwing when the row is
+  missing or RLS hides it.
+- `profiles.is_admin` is **not client-writable**: RLS allows updating your own row, but the column
+  grant only covers `full_name`.
+- If email confirmation is enabled, `signUp` returns a null session and the register screen tells
+  the user to confirm before signing in. Handle both cases.
+- Promote an admin with SQL: `update public.profiles set is_admin = true where id = '<uuid>';`
+
+The publishable (`sb_publishable_...`) key is meant to ship in clients. Never put the secret /
+`service_role` key in the app.
+
+## Authentication — admin console (Express)
+
+- **Access token**: HS256 JWT, 15 min, `Authorization: Bearer`. Stateless.
+- **Refresh token**: 32 random bytes, 30 days, stored **hashed** in `refresh_tokens`, rotated on
+  every use. Replaying a used token revokes every session for that user — deliberate, do not "fix" it.
+- The browser receives the refresh token only as an `httpOnly`, `SameSite=Strict` cookie scoped to
+  `/api/auth`. The SPA keeps the access token in memory, so no token touches `localStorage`.
+- Passwords: `scrypt`, `scrypt$<salt>$<hash>` in one column. Do not add bcrypt.
 - Roles: `household` | `admin`. **Registration always creates `household`.** Never accept `role`
-  from a request body. Admin accounts come from the seed or a manual DB change.
+  from a request body.
 - Login/registration are rate limited in memory (10 attempts per 15 min per IP+email).
 
 `/api/admin/*` is gated by `authenticate` + `requireAdmin`. Keep that ordering.
 
 ## Data model
 
-`users`, `refresh_tokens`, `recycling_centres`, `item_categories`. Schema lives inline in
-`server/src/db.ts` as `CREATE TABLE IF NOT EXISTS` — there is no migration runner yet. Adding a
-column means editing that block plus handling existing databases (see below).
+**SQLite** (`server/src/db.ts`, `CREATE TABLE IF NOT EXISTS`, no migration runner yet):
+`users`, `refresh_tokens`, `recycling_centres`, `item_categories`.
 
-`disposal_method` is one of `recycle | compost | general | special` and drives the advice the app
-will show. `accepted_materials` is a JSON string in SQLite, an array over the API.
+`disposal_method` is `recycle | compost | general | special` and drives the advice the app will
+show. `accepted_materials` is a JSON string in SQLite, an array over the API.
+
+**Supabase**: `profiles` only, see `supabase/schema.sql`.
 
 ## Seeded data is unverified
 
 The Tzu-Chi and Jalan Pahlawan entries come from the project brief. **All coordinates are
 approximate town-level positions.** The other two centres are placeholders. Before anything routes
-a real user, an administrator must correct them and tick "Verified" — `is_verified` exists exactly
-for that reason.
+a real user, an administrator must correct them and tick "Verified".
 
 ## Conventions
 
@@ -86,7 +126,8 @@ for that reason.
 - API responses are camelCase; database columns are snake_case; serializers convert.
 - Admin UI: hand-written CSS in `admin/src/styles.css`, no UI library, no Tailwind. Reuse
   `.card`, `.btn`, `.badge`, `.field` rather than inventing new styles.
-- Flutter: Material 3, seed colour `#1F7A52`, shared chrome in `widgets/auth_scaffold.dart`.
+- Flutter: Material 3, seed colour `#1F7A52`, shared chrome in `src/widgets/auth_scaffold.dart`,
+  screens in `src/pages/`, services in `services/`.
 
 ## Gotchas
 
@@ -95,17 +136,15 @@ for that reason.
 - `DATABASE_PATH` is resolved against the repo root, not the cwd.
 - Changing `JWT_SECRET` invalidates every session — expected, but surprising in dev.
 - SQLite on Windows locks the file; stop the API before deleting `server/data/app.db`.
-- The Flutter app targets `http://10.0.2.2:4000` by default (Android emulator → host). Override
-  with `--dart-define=API_BASE_URL=http://<lan-ip>:4000` on a real device, and note that plain
-  HTTP needs `android:usesCleartextTraffic="true"` in the debug manifest.
-- `mobile/` has no `android/` or `ios/` folders. Run `flutter create --platforms=android,ios .`
-  inside it once to generate them.
+- `mobile/` has no `android/` or `ios/` folders until `flutter create` is run.
 
 ## Next modules: where they plug in
 
-- Pantry items: new `pantry_items` table with `user_id`, photo path, expiry date, category id.
-  Reachable from `/api/inventory`, household role only.
-- Public read API for the app: `GET /api/centres` and `GET /api/categories` without admin gating.
-  Keep the admin routes separate.
+- Pantry items: a Supabase table `pantry_items` (`user_id`, photo path, expiry date, category id)
+  with RLS `user_id = auth.uid()`. Follow the `profiles` pattern: enable RLS, grant only the
+  columns a household may write.
+- Recycling centres for the app: they currently live in SQLite only. Either expose a public
+  `GET /api/centres` without admin gating, or move the table to Supabase and point the admin
+  console there. Pick one before writing the map screen.
 - Offline cache: sqflite mirror of the pantry, not of the centres (centres should stay fresh).
 - Notifications: `flutter_local_notifications` + a scheduled local check; no push server yet.
