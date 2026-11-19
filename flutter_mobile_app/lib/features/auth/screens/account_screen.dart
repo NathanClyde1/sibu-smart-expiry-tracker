@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/auth_service.dart';
+import '../services/auth_service.dart';
 
-class AccountPage extends StatefulWidget {
-  const AccountPage({super.key, required this.auth, required this.user});
+class AccountScreen extends StatefulWidget {
+  const AccountScreen({super.key, required this.auth, required this.user});
 
   final AuthService auth;
   final User user;
 
   @override
-  State<AccountPage> createState() => _AccountPageState();
+  State<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _AccountPageState extends State<AccountPage> {
+class _AccountScreenState extends State<AccountScreen> {
   late final Future<bool> _adminCheck;
   bool _busy = false;
   String? _error;

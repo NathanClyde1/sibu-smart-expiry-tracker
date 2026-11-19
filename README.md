@@ -31,6 +31,8 @@ The database is created and seeded on first start at `server/data/app.db`.
 | `npm test` | API test suite (temp DB, no server required) |
 | `npm run build` | Type-check and build both packages |
 | `npm run seed` | Re-run seeding by hand (idempotent) |
+| `npm run setup:features` | Create the Flutter feature folders and print the branch rules |
+| `npm run setup:features -- --check` | Report only; exits 1 if a feature file is missing |
 
 ## API
 
@@ -47,14 +49,63 @@ The database is created and seeded on first start at `server/data/app.db`.
 | PATCH/DELETE | `/api/admin/categories/:id` | admin |
 | GET | `/api/admin/stats` | admin |
 
-## Mobile client
+## Team workflow (4 developers)
 
-`mobile/` is a Flutter app: sign in, create a household, view the account, sign out. Authentication
-runs on **Supabase Auth**; the session is persisted by `supabase_flutter` in platform secure
-storage.
+Two projects, four feature owners. Each developer works inside **one** feature folder and nothing
+else, so two people never edit the same file.
+
+| Owner | Feature folder | Branch prefix | Screen file |
+| --- | --- | --- | --- |
+| Member 1 | `flutter_mobile_app/lib/features/dashboard/` | `feature/dashboard-*` | `screens/dashboard_screen.dart` |
+| Member 2 | `flutter_mobile_app/lib/features/map_disposal/` | `feature/map-disposal-*` | `screens/map_disposal_screen.dart` |
+| Member 3 | `flutter_mobile_app/lib/features/sync_alerts/` | `feature/sync-alerts-*` | `screens/sync_alerts_screen.dart` |
+| Member 4 | `flutter_mobile_app/lib/features/auth/` | `feature/auth-*` | `screens/login_screen.dart` |
+| Tech lead | `lib/main.dart`, `lib/core/`, `lib/features/shell/`, `pubspec.yaml` | `chore/*`, `fix/*` | `shell/main_navigation_screen.dart` |
+
+**Shared files are tech-lead only.** `main.dart`, `lib/core/` (theme, config, shared widgets),
+`lib/features/shell/` (the bottom-nav shell) and `pubspec.yaml` are owned by the lead. If a feature
+needs a new dependency or a new tab, ask — do not edit them in a feature branch, because that is the
+one place two branches will conflict.
+
+### Rules
+
+1. **Never commit to `main`.** Branch from an up-to-date `main`:
+   ```bash
+   git switch main && git pull
+   git switch -c feature/dashboard-expiry-countdown
+   ```
+2. **One branch, one feature, one screen.** Stay inside your feature folder. If you need something
+   from `core/`, read it; don't change it.
+3. **Commit style:** `feat(<feature>): <what changed>`, `fix(<feature>): ...`,
+   `test(<feature>): ...`. Feature names are `auth`, `dashboard`, `map-disposal`, `sync-alerts`.
+4. **Pull `main` before opening a PR** and fix conflicts in your branch, not in `main`:
+   ```bash
+   git fetch origin && git rebase origin/main
+   ```
+5. **Every PR needs one reviewer** (the tech lead for shared-file changes, a teammate otherwise)
+   and must build: `cd flutter_mobile_app && flutter analyze && flutter test`.
+6. **Squash-merge into `main`.** One feature, one commit on `main`. Never force-push `main`.
+7. **Delete the branch after merge.** `git switch main && git pull && git branch -d <branch>`.
+
+### Scaffolding
+
+`npm run setup:features` creates any missing feature folders and lists the ownership table. It
+**never writes Dart source**, so it cannot overwrite work in progress. If a starter file is
+missing, restore it from `main`:
 
 ```bash
-cd mobile
+git checkout main -- flutter_mobile_app/lib
+```
+
+## Mobile client
+
+`flutter_mobile_app/` is a Flutter app: sign in, create a household, view the account, sign out.
+Authentication runs on **Supabase Auth**; the session is persisted by `supabase_flutter` in platform
+secure storage. The signed-in shell is a four-tab bottom nav (Pantry, Dispose, Alerts, Account)
+wired in `lib/features/shell/main_navigation_screen.dart`.
+
+```bash
+cd flutter_mobile_app
 flutter create --platforms=android,ios .   # generates android/ and ios/ (not committed)
 flutter pub get
 flutter run

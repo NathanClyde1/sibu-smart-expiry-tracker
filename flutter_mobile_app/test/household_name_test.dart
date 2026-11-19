@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:smart_expiry_guide/services/auth_service.dart';
+import 'package:smart_expiry_guide/features/auth/services/auth_service.dart';
 
 void main() {
   group('householdName', () {

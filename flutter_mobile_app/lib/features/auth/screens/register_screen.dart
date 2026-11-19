@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/auth_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/auth_scaffold.dart';
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key, required this.auth});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key, required this.auth});
 
   final AuthService auth;
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();

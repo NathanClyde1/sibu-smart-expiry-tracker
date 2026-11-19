@@ -8,15 +8,15 @@ server/data/
 admin/dist/
 
 # Flutter
-mobile/.dart_tool/
-mobile/build/
-mobile/.flutter-plugins
-mobile/.flutter-plugins-dependencies
-mobile/pubspec.lock
-mobile/android/
-mobile/ios/
-mobile/web/
-mobile/.idea/
+flutter_mobile_app/.dart_tool/
+flutter_mobile_app/build/
+flutter_mobile_app/.flutter-plugins
+flutter_mobile_app/.flutter-plugins-dependencies
+flutter_mobile_app/pubspec.lock
+flutter_mobile_app/android/
+flutter_mobile_app/ios/
+flutter_mobile_app/web/
+flutter_mobile_app/.idea/
 
 .DS_Store
 Thumbs.db

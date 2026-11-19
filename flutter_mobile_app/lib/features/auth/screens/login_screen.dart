@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../services/auth_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/auth_scaffold.dart';
-import 'register_page.dart';
+import 'register_screen.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.auth});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key, required this.auth});
 
   final AuthService auth;
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
                   ? null
                   : () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
-                          builder: (_) => RegisterPage(auth: widget.auth),
+                          builder: (_) => RegisterScreen(auth: widget.auth),
                         ),
                       ),
               child: const Text('New household? Create an account'),

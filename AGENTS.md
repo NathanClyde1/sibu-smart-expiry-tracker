@@ -40,13 +40,29 @@ Note the spelling difference when you do: Supabase uses `recycling_centers` (US)
 ## Layout
 
 ```
-server/   Express + TypeScript API, SQLite via better-sqlite3, node:test suite
-admin/    React 18 + Vite admin console (SPA, talks to /api through the Vite proxy)
-mobile/   Flutter 3 client: Supabase Auth screens
-supabase/ SQL to run once in the Supabase project
+server/              Express + TypeScript API, SQLite via better-sqlite3, node:test suite
+admin/               React 18 + Vite admin console (SPA, talks to /api through the Vite proxy)
+flutter_mobile_app/  Flutter 3 client, split into feature folders (4 developers)
+supabase/            SQL to run once in the Supabase project
+scripts/             setup-features.mjs - folder scaffolding + ownership report
 ```
 
-npm workspaces cover `server` and `admin`. `mobile/` is a separate Flutter project.
+npm workspaces cover `server` and `admin`. `flutter_mobile_app/` is a separate Flutter project.
+
+Inside the Flutter app, each feature owns one folder so branches do not collide:
+
+```
+lib/main.dart                          tech lead - auth-state routing
+lib/core/                              tech lead - theme.dart, config.dart, widgets/
+lib/features/shell/                    tech lead - bottom-nav shell
+lib/features/auth/                     Member 4 - screens, services, widgets
+lib/features/dashboard/                Member 1 - screens
+lib/features/map_disposal/             Member 2 - screens
+lib/features/sync_alerts/              Member 3 - screens
+```
+
+Branch rules live in `README.md` ("Team workflow"). Shared files - `main.dart`, `core/`,
+`features/shell/`, `pubspec.yaml` - are tech-lead changes only.
 
 ## Run it
 
@@ -64,23 +80,23 @@ categories. Seeding is idempotent: it only fills empty tables and never resets a
 Mobile:
 
 ```bash
-cd mobile
+cd flutter_mobile_app
 flutter create --platforms=android,ios .   # generates android/ and ios/ (not committed)
 flutter pub get
 flutter run
 ```
 
-`mobile/lib/src/config.dart` holds the Supabase URL and publishable key, overridable with
-`--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`.
+`flutter_mobile_app/lib/core/config.dart` holds the Supabase URL and publishable key, overridable
+with `--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...`.
 
 **Before the mobile app works, run `supabase/schema.sql` in the Supabase SQL editor.** Without it
 there is no `profiles` table, so signup leaves no profile and `isAdmin()` always returns false.
 
 ## Authentication — mobile (Supabase)
 
-`mobile/lib/services/auth_service.dart` is the only auth entry point. It wraps
-`supabase_flutter`, which also persists the session in platform secure storage — there is no token
-code in this repo.
+`flutter_mobile_app/lib/features/auth/services/auth_service.dart` is the only auth entry point. It
+wraps `supabase_flutter`, which also persists the session in platform secure storage — there is no
+token code in this repo.
 
 - `signUp` sends `data: {full_name}`; the `handle_new_user` trigger copies it into `public.profiles`.
 - `isAdmin()` reads `profiles.is_admin`, returning `false` instead of throwing when the row is
@@ -155,8 +171,10 @@ a real user, an administrator must correct them and tick "Verified".
 - API responses are camelCase; database columns are snake_case; serializers convert.
 - Admin UI: hand-written CSS in `admin/src/styles.css`, no UI library, no Tailwind. Reuse
   `.card`, `.btn`, `.badge`, `.field` rather than inventing new styles.
-- Flutter: Material 3, seed colour `#1F7A52`, shared chrome in `src/widgets/auth_scaffold.dart`,
-  screens in `src/pages/`, services in `services/`.
+- Flutter: Material 3, seed colour `#1F7A52`, shared chrome in
+  `lib/features/auth/widgets/auth_scaffold.dart`, feature screens in `lib/features/*/screens/`,
+  services in `lib/features/*/services/`, shared widgets in `lib/core/widgets/`. Use `SurfaceCard`
+  rather than inventing a new card style.
 
 ## Gotchas
 
@@ -165,7 +183,7 @@ a real user, an administrator must correct them and tick "Verified".
 - `DATABASE_PATH` is resolved against the repo root, not the cwd.
 - Changing `JWT_SECRET` invalidates every session — expected, but surprising in dev.
 - SQLite on Windows locks the file; stop the API before deleting `server/data/app.db`.
-- `mobile/` has no `android/` or `ios/` folders until `flutter create` is run.
+- `flutter_mobile_app/` has no `android/` or `ios/` folders until `flutter create` is run.
 
 ## Next modules: where they plug in
 

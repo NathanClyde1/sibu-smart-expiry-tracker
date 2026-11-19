@@ -15,7 +15,8 @@
     "start": "npm run start -w server",
     "seed": "npm run seed -w server",
     "test": "npm test -w server",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w admin"
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w admin",
+    "setup:features": "node scripts/setup-features.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
