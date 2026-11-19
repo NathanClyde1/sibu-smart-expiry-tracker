@@ -1,21 +1,29 @@
--- Smart Expiry and Local Disposal Guide - Supabase schema
+-- Smart Expiry and Local Disposal Guide - Supabase schema (profiles)
 --
--- Run this once in Supabase Studio > SQL Editor for project
--- ywyxdmsroaqmaqyoovgb. Safe to run again: every statement is idempotent.
+-- Run in Supabase Studio > SQL Editor for project ywyxdmsroaqmaqyoovgb.
+-- Safe to run again: every statement is idempotent, and re-running repairs the
+-- table grants on an existing database.
 --
--- Why it is needed: the Flutter app signs users up with
--- `data: {full_name}` and reads `profiles.is_admin`. Without the trigger
--- below, signup succeeds but no profile row ever appears, so isAdmin()
--- always returns false.
+-- ── Why the grants matter ──────────────────────────────────────────────
+-- A verified test on this project showed that a signed-in household user could
+-- PATCH their own profiles row and set is_admin = true, because the table-level
+-- UPDATE grant covered every column. Row-level security alone is not enough:
+-- the row was theirs, so the policy allowed it. The revoke/grant block at the
+-- bottom is what actually protects the admin flag. Do not remove it.
 
 -- ---------------------------------------------------------------- profiles
 
 create table if not exists public.profiles (
-  id         uuid primary key references auth.users (id) on delete cascade,
-  full_name  text not null default '',
-  is_admin   boolean not null default false,
-  created_at timestamptz not null default now()
+  id             uuid primary key references auth.users (id) on delete cascade,
+  full_name      text not null default '',
+  household_size integer not null default 1,
+  is_admin       boolean not null default false,
+  created_at     timestamptz not null default now()
 );
+
+-- Projects created before household_size existed.
+alter table public.profiles
+  add column if not exists household_size integer not null default 1;
 
 alter table public.profiles enable row level security;
 
@@ -71,10 +79,24 @@ create policy "update own profile"
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
--- Column-level grants are the real guard: a household user can rename itself
--- but can never write is_admin, even though the update policy matches.
+-- ----------------------------------------------------------- column grants
+--
+-- Household users may read their profile and edit two harmless columns.
+-- Everything else - is_admin above all - is unreachable from the client.
+-- The signup trigger inserts as the function owner, so it is unaffected.
 -- Promote the first administrator by hand:
 --   update public.profiles set is_admin = true where id = '<user-uuid>';
+
 revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to authenticated;
-grant update (full_name) on public.profiles to authenticated;
+grant update (full_name, household_size) on public.profiles to authenticated;
+
+-- --------------------------------------------------------------- verify
+--
+-- Expect: can_write_is_admin = false
+select has_column_privilege(
+  'authenticated',
+  'public.profiles',
+  'is_admin',
+  'UPDATE'
+) as can_write_is_admin;

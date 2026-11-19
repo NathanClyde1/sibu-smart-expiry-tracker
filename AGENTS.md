@@ -27,9 +27,15 @@ React admin  ──> Express API ──> SQLite (server/data) <- council staff
 
 The mobile app is being built against Supabase because the team standardised on it. The admin
 console still runs on the Express API that was written first. **These are two separate user stores
-and two separate databases.** That is the one open architectural decision in this repo: either
-move the centres/categories into Supabase and retire the Express API, or keep the split and accept
-that administrators cannot sign into the mobile app. Do not add a third path.
+and two separate databases.**
+
+The duplication is already real: recycling centres exist twice, as `recycling_centers` in Supabase
+and `recycling_centres` in SQLite. Edits in the admin console do **not** reach the app. That is the
+one open architectural decision in this repo: point the admin console at Supabase and retire the
+Express API, or keep the split and accept it. Do not add a third path.
+
+Note the spelling difference when you do: Supabase uses `recycling_centers` (US), SQLite uses
+`recycling_centres` (UK).
 
 ## Layout
 
@@ -79,8 +85,13 @@ code in this repo.
 - `signUp` sends `data: {full_name}`; the `handle_new_user` trigger copies it into `public.profiles`.
 - `isAdmin()` reads `profiles.is_admin`, returning `false` instead of throwing when the row is
   missing or RLS hides it.
-- `profiles.is_admin` is **not client-writable**: RLS allows updating your own row, but the column
-  grant only covers `full_name`.
+- `profiles.is_admin` is **not client-writable**, but only because of the column grants at the
+  bottom of `supabase/schema.sql`. This was verified the hard way: before those grants were
+  applied, a signed-in household user could PATCH their own row and set `is_admin = true`.
+  Row-level security does not stop that — the row *is* theirs, so the policy allows it. Never
+  remove the revoke/grant block.
+- Check it with `select has_column_privilege('authenticated','public.profiles','is_admin','UPDATE');`
+  — it must return `false`.
 - If email confirmation is enabled, `signUp` returns a null session and the register screen tells
   the user to confirm before signing in. Handle both cases.
 - Promote an admin with SQL: `update public.profiles set is_admin = true where id = '<uuid>';`
@@ -110,7 +121,25 @@ The publishable (`sb_publishable_...`) key is meant to ship in clients. Never pu
 `disposal_method` is `recycle | compost | general | special` and drives the advice the app will
 show. `accepted_materials` is a JSON string in SQLite, an array over the API.
 
-**Supabase**: `profiles` only, see `supabase/schema.sql`.
+**Supabase** (columns confirmed against the live project):
+
+| Table | Columns |
+| --- | --- |
+| `profiles` | `id`, `full_name`, `household_size`, `is_admin`, `created_at` |
+| `pantry_items` | `id`, `user_id`, `item_name`, `expiry_date`, `category`, `quantity`, `image_url`, `status` |
+| `recycling_centers` | `id`, `name`, `address`, `latitude`, `longitude`, `accepted_materials`, `created_at` |
+
+Two differences from the SQLite side that will bite later:
+
+- **There is no category table in Supabase.** `pantry_items.category` is free text, while the admin
+  console manages a `item_categories` table with a `disposal_method`. If the app is to show
+  disposal advice per item, either add a categories table to Supabase or map the text to a fixed
+  enum in the client. Decide before building the suggestion screen.
+- `recycling_centers` has no `is_verified`, `opening_hours` or `notes` column, so the admin
+  console's verification workflow cannot move over as-is.
+
+`supabase/schema.sql` in this repo sets up `profiles` (table, signup trigger, RLS, column grants).
+Re-running it is safe and only fills in what is missing.
 
 ## Seeded data is unverified
 
@@ -140,11 +169,11 @@ a real user, an administrator must correct them and tick "Verified".
 
 ## Next modules: where they plug in
 
-- Pantry items: a Supabase table `pantry_items` (`user_id`, photo path, expiry date, category id)
-  with RLS `user_id = auth.uid()`. Follow the `profiles` pattern: enable RLS, grant only the
-  columns a household may write.
-- Recycling centres for the app: they currently live in SQLite only. Either expose a public
-  `GET /api/centres` without admin gating, or move the table to Supabase and point the admin
-  console there. Pick one before writing the map screen.
-- Offline cache: sqflite mirror of the pantry, not of the centres (centres should stay fresh).
+- Pantry items: the table already exists (`pantry_items`). Use the real columns — `user_id`,
+  `item_name`, `expiry_date`, `category`, `quantity`, `image_url`, `status` — and confirm RLS is
+  on with `user_id = auth.uid()` before shipping, since that policy is what stops one household
+  reading another's groceries.
+- Recycling centres for the app: read `recycling_centers` from Supabase. The admin console writes
+  to SQLite, so either point it at Supabase or the app will show stale data.
+- Offline cache: sqflite mirror of `pantry_items`, not of the centres (centres should stay fresh).
 - Notifications: `flutter_local_notifications` + a scheduled local check; no push server yet.
